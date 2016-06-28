@@ -48,8 +48,9 @@ def combine_labels(data_rows, remove_dup=True):
         #fix for listfailure python
         #id_cat_dict[event_id] = list(set(id_cat_dict[event_id]))
 
-        id_data_dict[event_id] = row[0:-1]
-
+        #id_data_dict[event_id] = row[0:-1]
+        #filter tag $nbsp manually, saw the tag often but not removed by Beautifuloup
+        id_data_dict[event_id] = (row[0], BeautifulSoup(row[1]).getText().replace("&nbsp", ""), row[2], row[3], row[4], BeautifulSoup(row[5]).getText().replace("&nbsp", ""), row[6], row[7])
     events = []
     labels = []
     for id in id_cat_dict.keys():
@@ -119,8 +120,6 @@ if __name__ == "__main__":
         print "Data succesfully loaded"
     else:
         cursor = ConnectDB()
-        #cursor.execute("SELECT si3ow_jem_events.id, title, dates, times, endtimes, introtext, catid-2, locid FROM si3ow_jem_events INNER JOIN si3ow_jem_cats_event_relations ON si3ow_jem_events.id = si3ow_jem_cats_event_relations.itemid WHERE catid > 1")
-        #SELECT a.id, a.title, a.dates, a.times, a.endtimes, a.introtext, c.catid-2, a.locid FROM si3ow_jem_events AS a INNER JOIN si3ow_jem_cats_event_relations AS c ON a.id = c.itemid WHERE catid > 1
         cursor.execute('SELECT a.id, a.title, a.dates, a.times, a.endtimes, a.introtext, c.catid-2, a.locid FROM si3ow_jem_events AS a INNER JOIN si3ow_jem_cats_event_relations AS c ON a.id = c.itemid WHERE catid > 1 AND recurrence_first_id = 0 AND introtext != "" ')
         data_rows = cursor.fetchall()
         # cursor.execute("SELECT id, venue FROM si3ow_jem_venues")
@@ -131,21 +130,22 @@ if __name__ == "__main__":
         joblib.dump((events, labels), "../data/event.pkl")
         print "Data succesfully loaded"
 
-        # path = 'C:\Users\Tanja\Documents\Scriptie\data\events'
-        # for event in events:
-        #     filename = os.path.join(path, str(event[0]) + ".txt")
-        #     text_file = open(filename, "w")
-        #     text_file.write(event[1].encode('ascii', 'ignore') + " " + event[5].encode('ascii', 'ignore'))
-        #     text_file.close()
-        # print "Data succesfully loaded"
+        #do this once with new data
+        #path = 'C:\Users\Tanja\Documents\Scriptie\mltc-Ugenda\data\events'
+        #for event in events:
+        #    filename = os.path.join(path, str(event[0]) + ".txt")
+        #    text_file = open(filename, "w")
+        #    text_file.write(event[1].encode('ascii', 'ignore') + " " + event[5].encode('ascii', 'ignore'))
+        #    text_file.close()
+        print "Data succesfully loaded"
 
     print "Number of instances:",len(events)
     filename = "../data/stopwords.txt"
     with open(filename, 'r') as f:
         stopwords = f.readlines()
     stopwords = [word[:-1] for word in stopwords]
-    plaintext = [BeautifulSoup(" ".join(event[1])+ " " + event[5]).getText() for event in events]
-    # plaintext = [date_one_event(event[2])+ " " + time_one_event(event[3]) for event in events]
+    plaintext = [" ".join(event[1])+ " " + event[5] for event in events]
+    #plaintext = [date_one_event(event[2])+ " " + time_one_event(event[3]) for event in events]
     dans = 0
     woord = 0
     theater = 0

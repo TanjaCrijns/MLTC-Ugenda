@@ -3,7 +3,7 @@ import pickle
 import tqdm
 import glob
 
-OUTPUT_FOLDER = '../data/frog_output'
+OUTPUT_FOLDER = '../data/frog_output/'
 
 
 
