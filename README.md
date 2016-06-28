@@ -10,6 +10,9 @@ Relevant links
 ==============
 
 https://www.ugenda.nl/
+
 https://languagemachines.github.io/frog/
+
 https://www.crummy.com/software/BeautifulSoup/
+
 http://scikit-learn.org/stable/
