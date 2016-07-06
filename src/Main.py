@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import MySQLdb
 import sklearn
 import numpy as np
@@ -17,23 +18,32 @@ import pickle
 from sklearn.ensemble import RandomForestClassifier
 import os.path
 import datetime
+import glob, os
+import pandas as pd
+from tqdm import tqdm
+import random
 
+# --------------------------------------------------  Global declarations  -------------------------------------------------- #
 label_names = ["Dans", "Woord", "Theater", "Film", "Muziek", "Party", "Beeldend", "Kids", "Evenement", "Varia"]
 db = None
+
+# --------------------------------------------------     Help functions    -------------------------------------------------- #
+
+# Funcion to connect with database
 def ConnectDB():
     global db
-    db = MySQLdb.connect(host="localhost",    # your host, usually localhost
-                         user="root",         # your username
-                         db="ugenda",         # name of the data base
+    db = MySQLdb.connect(host="localhost",
+                         user="root",
+                         db="ugenda",
                          charset = "utf8" )
     return db.cursor()
 
-# Deletes duplicates, duplicates with a different category are joined (Title and introtext)
-def combine_labels(data_rows, remove_dup=True):
-    # take id's in list
+# Function that deletes duplicates from dataset. Duplicates with a different category are joined (Title and introtext)
+def combine_labels(data_rows, remove_dup):
+    # Put id's in list
     ids = zip(*data_rows)[0]
 
-    # make two dictionaries with id as keys
+    # Make two dictionaries for labels and the data with id as keys\
     id_cat_dict = {id:[] for id in ids}
     id_data_dict = {id:[] for id in ids}
 
@@ -41,24 +51,23 @@ def combine_labels(data_rows, remove_dup=True):
     for row in data_rows:
         event_id = row[0]
         category = row[6]
-        #-1 is de laatste
 
         #put category in dictionary
         id_cat_dict[event_id].append(category)
         #fix for listfailure python
         #id_cat_dict[event_id] = list(set(id_cat_dict[event_id]))
-
         #id_data_dict[event_id] = row[0:-1]
-        #filter tag $nbsp manually, saw the tag often but not removed by Beautifuloup
+
+        # Filter html with beautifulsoup, filter tag $nbsp manually, saw the tag often but not removed by Beautifuloup
         id_data_dict[event_id] = (row[0], BeautifulSoup(row[1]).getText().replace("&nbsp", ""), row[2], row[3], row[4], BeautifulSoup(row[5]).getText().replace("&nbsp", ""), row[6], row[7])
+
     events = []
     labels = []
-    for id in id_cat_dict.keys():
+    for id in sorted(id_cat_dict.keys()):
         events.append(id_data_dict[id])
         labels.append(id_cat_dict[id])
 
     if remove_dup:
-        # hulplijst voor vergelijken text en titel
         without_dup_text_title = []
 
         without_dup_events = []
@@ -68,84 +77,18 @@ def combine_labels(data_rows, remove_dup=True):
                 without_dup_text_title.append(event[1] + event[5])
                 without_dup_events.append(event)
                 without_dup_labels.append(labels[index])
-
         return without_dup_events, without_dup_labels
     else:
         return events, labels
 
-def date_one_event(date):
-    if date:
-        day = date.weekday()
-        if day > 3:
-            return "weekend"
-        else:
-            return "weekday"
-    else:
-        return "unknowndate"
+# Function that puts the content of a textfile into a list
+def read_list_text(file):
+    with open(file, 'r') as f:
+        plain_list = f.readlines()
+    return plain_list
 
-def time_one_event(time):
-    if time is not None:
-        time = str(time)
-        time = time.split(":")
-        hour = int(time[0])
-        if hour < 12:
-            return "morning"
-        if 12 < hour and hour < 18:
-            return "afternoon"
-        else:
-            return "evening"
-    else:
-        return "unknownstartingtime"
-
-#php failed me here, so extra function
-def add_venues(data, venues):
-    data = list(data)
-    for index, row in enumerate (data):
-        for loc in venues:
-            if row[7] == loc[0]:
-                listdata = list(data[index])
-                listdata[7] = loc[1]
-                listdata = tuple(listdata)
-                data[index] = listdata
-                break
-
-    return tuple(data)
-
-
-
-if __name__ == "__main__":
-    #SQL Query, retrieves event id, title, introtext and category id
-    if os.path.isfile("../data/event.pkl"):
-        events, labels = joblib.load("../data/event.pkl")
-        print "Data succesfully loaded"
-    else:
-        cursor = ConnectDB()
-        cursor.execute('SELECT a.id, a.title, a.dates, a.times, a.endtimes, a.introtext, c.catid-2, a.locid FROM si3ow_jem_events AS a INNER JOIN si3ow_jem_cats_event_relations AS c ON a.id = c.itemid WHERE catid > 1 AND recurrence_first_id = 0 AND introtext != "" ')
-        data_rows = cursor.fetchall()
-        # cursor.execute("SELECT id, venue FROM si3ow_jem_venues")
-        # venues = cursor.fetchall()
-        # data_rows = add_venues(data_rows, venues)
-        # print data_rows[0:10]
-        events, labels = combine_labels(data_rows, True)
-        joblib.dump((events, labels), "../data/event.pkl")
-        print "Data succesfully loaded"
-
-        #do this once with new data
-        #path = 'C:\Users\Tanja\Documents\Scriptie\mltc-Ugenda\data\events'
-        #for event in events:
-        #    filename = os.path.join(path, str(event[0]) + ".txt")
-        #    text_file = open(filename, "w")
-        #    text_file.write(event[1].encode('ascii', 'ignore') + " " + event[5].encode('ascii', 'ignore'))
-        #    text_file.close()
-        print "Data succesfully loaded"
-
-    print "Number of instances:",len(events)
-    filename = "../data/stopwords.txt"
-    with open(filename, 'r') as f:
-        stopwords = f.readlines()
-    stopwords = [word[:-1] for word in stopwords]
-    plaintext = [" ".join(event[1])+ " " + event[5] for event in events]
-    #plaintext = [date_one_event(event[2])+ " " + time_one_event(event[3]) for event in events]
+# Function that shows how many labels there are in each category
+def get_numbers_categories(labels) :
     dans = 0
     woord = 0
     theater = 0
@@ -156,7 +99,6 @@ if __name__ == "__main__":
     kids=0
     evenement=0
     varia =0
-    print "labels:" + str(len(labels))
     for label in labels:
         if 0 in label:
             dans = dans+1
@@ -179,29 +121,166 @@ if __name__ == "__main__":
         if 9 in label:
             varia = varia+1
 
-    print "dans =" + str(dans) + "woord =" + str(woord) + "theater =" + str(theater) + "film =" + str(film) + "muziek =" + str(muziek) + "party =" + str(party) + "party =" + str(party) + "beeldend =" + str(beeldend) + "kids =" + str(kids) + "evenement =" + str(evenement) + "varia =" + str(varia)
-    bla = dans + woord + theater + film + muziek + party + beeldend + kids+ evenement + varia
-    print "Totaal aantal labels:" + str(bla)
+    print "dans =" + str(dans) + "\nwoord =" + str(woord) + "\ntheater =" + str(theater) + "\nfilm =" + str(film) + "\nmuziek =" + str(muziek) + "\nparty =" + str(party) + "\nparty =" + str(party) + "\nbeeldend =" + str(beeldend) + "\nkids =" + str(kids) + "\nevenement =" + str(evenement) + "\nvaria =" + str(varia)
+    totaal = dans + woord + theater + film + muziek + party + beeldend + kids+ evenement + varia
+    print "Totaal aantal labels:" + str(totaal)
+
+# Function that receives the date of an event and return "weekend", "weekdag" or "onbekendedatum"
+def date_one_event(date):
+    if date:
+        day = date.weekday()
+        if day > 3:
+            return "weekend"
+        else:
+            return "weekdag"
+    else:
+        return "onbekendedatum"
+
+# Function that receives the time of an event and returns "ochtendtijd", "middagtijd", "avonddtijd" or "onbekendetijd"
+def time_one_event(time):
+    if time is not None:
+        time = str(time)
+        time = time.split(":")
+        hour = int(time[0])
+        if hour < 12:
+            return "ochtendtijd"
+        if 12 < hour and hour < 18:
+            return "middagtijd"
+        else:
+            return "avonddtijd"
+    else:
+        return "onbekendetijd"
+
+# Function that receives the location of an event and returns a generalized version of that location
+def location_one_event(location_id, location_list):
+    path = "D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/barren.txt"
+    with open(path, 'r') as f:
+        bar_nijmegen = f.readlines()
+    if location_id == 0 or location_id == 1:
+        return "anderelocatie"
+    location_names = [loc[1] for loc in location_list]
+    index = [loc[0] for loc in location_list].index(location_id)
+    if "school" in location_names[index] or "college" in location_names[index] or "universiteit" in location_names[index] or "campus" in location_names[index] or "gymnasium" in location_names[index]:
+        return "schoollocatie"
+    if (any(bar in location_names[index] for bar in bar_nijmegen) or"café".decode('utf-8') in location_names[index] or "cafe" in location_names[index] or " bar " in location_names[index]) and not "CultuurCafé".decode('utf-8') in location_names[index] :
+        return "cafelocatie"
+    if "kerk" in location_names[index] or "church" in location_names[index] or "kapel" in location_names[index]:
+        return "kerklocatie"
+    if "bibliotheek" in location_names[index] or "library" in location_names[index]:
+        return "boeklocatie"
+    if "park" in location_names[index] or "plein" in location_names[index] or "kade" in location_names[index] or "tuin" in location_names[index] or "buiten" in location_names[index] or "berendonck" in location_names[index]:
+        return "buitenlocatie"
+    if "cinema" in location_names[index] or "bioscoop" in location_names[index] or "filmhuis" in location_names[index]:
+        return "bioscooplocatie"
+    if "theater" in location_names[index] or "schouwburg" in location_names[index] or "toneel" in location_names[index]:
+        return "theaterlocatie"
+    if "fabriek" in location_names[index] or "honig" in location_names[index] or "vasim" in location_names[index]:
+        return "fabrieklocatie"
+    else:
+        return location_names[index]
+
+# php failed me here, so extra function for putting the location id in the event list
+def add_venues(data, venues):
+    data = list(data)
+    for index, row in enumerate (data):
+        for loc in venues:
+            if row[7] == loc[0]:
+                listdata = list(data[index])
+                listdata[7] = loc[1]
+                listdata = tuple(listdata)
+                data[index] = listdata
+                break
+
+    return tuple(data)
+
+# ----------------------------------------------- Natural language processing ----------------------------------------------- #
+
+# Funtion that filters the dataframe based on certain part of speech (PoS) tags
+def filter_dataframe(df):
+    #'LET','TW','LID','VG', 'VZ','SPEC(symb)','BW','VNW'
+    FILTER = tuple(['VZ', 'VG','BW'])
+    df = df[~df['PoS'].str.startswith(FILTER)]
+    return df
+
+# Function that takes the frog output and turns it into a plain text string
+def frogtoplain() :
+    frog_events = []
+    os.chdir("../data/frog_output")
+    for file in glob.glob("*.out"):
+        frog_events.append(file)
+
+    plain_list = []
+    path = "D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/frog_output/"
+    for file in tqdm(frog_events):
+        df = pd.read_csv(path + file, engine='python', sep='\t*', index_col=False, header=None, names=['TokenNumber','Token','Lemma','PoS','PoSConfidence'])
+        df = df.drop(['PoSConfidence','TokenNumber'],axis=1)
+        df = filter_dataframe(df)
+
+        toString = " ".join( [str(val) for val in list(df['Token'])])
+        lowercased = toString.lower()
+        plain_list.append(lowercased)
+
+    with open("D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/frogplain.txt", 'w') as f:
+        for event in plain_list:
+            f.write(event + "\n")
+
+
+    return plain_list
+
+
+# ------------------------------------------------------     Main     ------------------------------------------------------ #
+
+if __name__ == "__main__":
+
+    # Only load data from database once, remove event.pkl if you want to load again, make sure to run frog as well
+    if os.path.isfile("../data/event.pkl"):
+        events, labels = joblib.load("../data/event.pkl")
+        print "Data succesfully loaded"
+    else:
+        cursor = ConnectDB()
+        cursor.execute('SELECT a.id, a.title, a.dates, a.times, a.endtimes, a.introtext, c.catid-2, a.locid FROM si3ow_jem_events AS a INNER JOIN si3ow_jem_cats_event_relations AS c ON a.id = c.itemid WHERE catid > 1 AND recurrence_first_id = 0 AND introtext != "" ')
+        data_rows = cursor.fetchall()
+        data_rows = [event for event in data_rows if len(event[5]) > 20]
+        events, labels = combine_labels(data_rows, True)
+        joblib.dump((events, labels), "../data/event.pkl")
+        print "Data succesfully loaded"
+        path = 'D:\Users\Tanja\Documents\Scriptie\mltc-Ugenda\data\events'
+        for event in events:
+            filename = os.path.join(path, str(event[0]) + ".txt")
+            text_file = open(filename, 'w')
+            text_file.write(event[1].encode('ascii', 'ignore') + " " + event[5].encode('ascii', 'ignore'))
+            text_file.close()
+        print "Data succesfully written to textfiles"
+    cursor = ConnectDB()
+    cursor.execute('SELECT a.id, a.venue FROM si3ow_jem_venues AS a')
+    locations = cursor.fetchall()
+
+    print "Number of instances:",len(events)
+    get_numbers_categories(labels)
+    filename = "../data/stopwords.txt"
+    with open(filename, 'r') as f:
+        stopwords = f.readlines()
+    stopwords = [word[:-1] for word in stopwords]
+
+    date_time_loc_list = [date_one_event(event[2])+ " " + time_one_event(event[3]) + " " + location_one_event(event[7],locations) + " " for event in events]
+    #temp_plaintext = ["".join(event[1] + " " + event[5]) for event in events]
+    #temp_plaintext = frogtoplain()
+    temp_plaintext = read_list_text("D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/frogplain.txt")
+    plaintext = [date_time_loc_list[y] + " " + date_time_loc_list[y] + event.decode('utf-8') for y, event in enumerate(temp_plaintext)]
+
 
     #10 fold test split
-    # meuk = 0
-    kf = KFold(len(plaintext), n_folds=6, shuffle=True, random_state=0)
+    #random state 0: 0.779, 1: 0.797, 2: 0.779 , 3: 0.778, 4: 0.798 , 5: 0.756, 69: 0.786 1337: 0,793,
+    kf = KFold(len(plaintext), n_folds=10, shuffle=True, random_state=4)
     f1_score_macro_list  = []
     f1_score_weighted_list = []
     recall_list = []
     precision_list = []
     accuracy_list = []
     for train, test in kf:
-        # meuk += 1
-        # if meuk > 2:
-        #     break
         print "Vectorizing"
-        #texttitle:
         v = CountVectorizer(stop_words=stopwords)
         #v = TfidfVectorizer(stop_words=stopwords)
-        #datetime:
-        # v = CountVectorizer()
-        #v = TfidfVectorizer()
         mb = MultiLabelBinarizer()
         train_text = [plaintext[i] for i in train]
         test_text = [plaintext[i] for i in test]
@@ -217,10 +296,11 @@ if __name__ == "__main__":
         # Logistic regression
         clf = OneVsRestClassifier(LogisticRegression(class_weight=None , random_state=0, solver='liblinear'),n_jobs=-2)
         # Random forest
-        #clf = OneVsRestClassifier(RandomForestClassifier(n_estimators=20, random_state=0, class_weight="balanced"), n_jobs=-2)
+        #clf = OneVsRestClassifier(RandomForestClassifier(n_estimators=150, random_state=0, class_weight="balanced"), n_jobs=-2)
         print "Fitting"
         clf.fit(X_train, y_train)
-        #predictions = clf.predict(X_test)
+
+        # force_label only with naive bayes and logistic regression because they work with probabilities
         force_label = True
         if force_label:
             probabilities = clf.predict_proba(X_test)
@@ -237,19 +317,16 @@ if __name__ == "__main__":
         print metrics.classification_report(y_test, predictions, target_names=label_names)
         accuracy = metrics.accuracy_score(y_test, predictions, normalize=True, sample_weight=None)
         accuracy_list.append(accuracy)
-        f1_score_macro = metrics.f1_score(y_test, predictions, average='macro', sample_weight=None)
-        f1_score_macro_list.append(f1_score_macro)
         f1_score_weighted = metrics.f1_score(y_test, predictions, average='weighted', sample_weight=None)
         f1_score_weighted_list.append(f1_score_weighted)
-        recall = metrics.recall_score(y_test, predictions, pos_label=1, average='macro', sample_weight=None)
+        recall = metrics.recall_score(y_test, predictions, pos_label=1, average='weighted', sample_weight=None)
         recall_list.append(recall)
-        precision = sklearn.metrics.precision_score(y_test, predictions, pos_label=1, average='macro', sample_weight=None)
+        precision = sklearn.metrics.precision_score(y_test, predictions, pos_label=1, average='weighted', sample_weight=None)
         precision_list.append(precision)
 
     overall_accuracy = np.mean(accuracy_list)
-    overall_f1_macro = np.mean(f1_score_macro)
     overall_f1_weighted = np.mean(f1_score_weighted)
     overall_recall = np.mean(recall_list)
     overall_precision = np.mean(precision_list)
 
-    print "Accuracy=", overall_accuracy, "\n", "Macro f1=", overall_f1_macro, "\n", "Weighted f1=", overall_f1_weighted, "\n", "Recall=", overall_recall, "\n", "Precision=", overall_precision
+    print "Accuracy=", overall_accuracy, "\n", "Weighted f1=", overall_f1_weighted, "\n", "Recall=", overall_recall, "\n", "Precision=", overall_precision
