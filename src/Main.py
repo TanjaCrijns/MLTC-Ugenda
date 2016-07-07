@@ -152,32 +152,36 @@ def time_one_event(time):
         return "onbekendetijd"
 
 # Function that receives the location of an event and returns a generalized version of that location
-def location_one_event(location_id, location_list):
+def location_one_event(location_id, location_list, only_loc):
     path = "D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/barren.txt"
     with open(path, 'r') as f:
         bar_nijmegen = f.readlines()
     if location_id == 0 or location_id == 1:
-        return "anderelocatie"
+        return (True,"anderelocatie")
     location_names = [loc[1] for loc in location_list]
     index = [loc[0] for loc in location_list].index(location_id)
+    if only_loc == True:
+        return (False,location_names[index])
     if "school" in location_names[index] or "college" in location_names[index] or "universiteit" in location_names[index] or "campus" in location_names[index] or "gymnasium" in location_names[index]:
-        return "schoollocatie"
+        return (True,"schoollocatie")
     if (any(bar in location_names[index] for bar in bar_nijmegen) or"café".decode('utf-8') in location_names[index] or "cafe" in location_names[index] or " bar " in location_names[index]) and not "CultuurCafé".decode('utf-8') in location_names[index] :
-        return "cafelocatie"
+        return (True,"cafelocatie")
     if "kerk" in location_names[index] or "church" in location_names[index] or "kapel" in location_names[index]:
-        return "kerklocatie"
+        return (True,"kerklocatie")
     if "bibliotheek" in location_names[index] or "library" in location_names[index]:
-        return "boeklocatie"
+        return (True,"boeklocatie")
     if "park" in location_names[index] or "plein" in location_names[index] or "kade" in location_names[index] or "tuin" in location_names[index] or "buiten" in location_names[index] or "berendonck" in location_names[index]:
-        return "buitenlocatie"
+        return (True,"buitenlocatie")
     if "cinema" in location_names[index] or "bioscoop" in location_names[index] or "filmhuis" in location_names[index]:
-        return "bioscooplocatie"
+        return (True,"bioscooplocatie")
     if "theater" in location_names[index] or "schouwburg" in location_names[index] or "toneel" in location_names[index]:
-        return "theaterlocatie"
+        return (True,"theaterlocatie")
     if "fabriek" in location_names[index] or "honig" in location_names[index] or "vasim" in location_names[index]:
-        return "fabrieklocatie"
+        return (True,"fabrieklocatie")
     else:
-        return location_names[index]
+        return (False, location_names[index])
+
+
 
 # php failed me here, so extra function for putting the location id in the event list
 def add_venues(data, venues):
@@ -198,7 +202,7 @@ def add_venues(data, venues):
 # Funtion that filters the dataframe based on certain part of speech (PoS) tags
 def filter_dataframe(df):
     #'LET','TW','LID','VG', 'VZ','SPEC(symb)','BW','VNW'
-    FILTER = tuple(['VZ', 'VG','BW'])
+    FILTER = tuple(['LID','VZ', 'VG','BW'])
     df = df[~df['PoS'].str.startswith(FILTER)]
     return df
 
@@ -262,11 +266,19 @@ if __name__ == "__main__":
         stopwords = f.readlines()
     stopwords = [word[:-1] for word in stopwords]
 
-    date_time_loc_list = [date_one_event(event[2])+ " " + time_one_event(event[3]) + " " + location_one_event(event[7],locations) + " " for event in events]
+    # If the location is transformed into a feature, it is added twice to the plaintext. If is has remained the original location, it is only added once.
+    date_time_loc_list = []
+    for event in events:
+        if location_one_event(event[7],locations, False)[0] == True:
+            date_time_loc_list.append(date_one_event(event[2])+ " " + time_one_event(event[3]) + " " + location_one_event(event[7],locations, False)[1] + " ")
+        else:
+            date_time_loc_list.append(date_one_event(event[2])+ " " + time_one_event(event[3]) + " ")
+
+    only_location = [location_one_event(event[7],locations, True)[1] for event in events]
     #temp_plaintext = ["".join(event[1] + " " + event[5]) for event in events]
     #temp_plaintext = frogtoplain()
     temp_plaintext = read_list_text("D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/frogplain.txt")
-    plaintext = [date_time_loc_list[y] + " " + date_time_loc_list[y] + event.decode('utf-8') for y, event in enumerate(temp_plaintext)]
+    plaintext = [date_time_loc_list[y] + " " + date_time_loc_list[y] +  " " + only_location[y] + " " + only_location[y] + " " + event.decode('utf-8') for y, event in enumerate(temp_plaintext)]
 
 
     #10 fold test split
