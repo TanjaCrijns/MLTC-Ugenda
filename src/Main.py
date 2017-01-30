@@ -261,12 +261,24 @@ if __name__ == "__main__":
 
     print "Number of instances:",len(events)
     get_numbers_categories(labels)
+    eenlabel = 0
+    tweelabel = 0
+    drieofgroterlabel = 0
+    for label in labels:
+        if len(label) == 1:
+            eenlabel = eenlabel +1
+        if len(label) == 2:
+            tweelabel = tweelabel +1
+        if len(label) >  2:
+            drieofgroterlabel = drieofgroterlabel +1
+    print "een = " + str(eenlabel) + "\ntwee = " + str(tweelabel) + "\ndrieofgroter = " + str(drieofgroterlabel)
     filename = "../data/stopwords.txt"
     with open(filename, 'r') as f:
         stopwords = f.readlines()
     stopwords = [word[:-1] for word in stopwords]
 
     # If the location is transformed into a feature, it is added twice to the plaintext. If is has remained the original location, it is only added once.
+    date_time_list = [date_one_event(event[2])+ " " + time_one_event(event[3]) + " " for event in events]
     date_time_loc_list = []
     for event in events:
         if location_one_event(event[7],locations, False)[0] == True:
@@ -274,10 +286,25 @@ if __name__ == "__main__":
         else:
             date_time_loc_list.append(date_one_event(event[2])+ " " + time_one_event(event[3]) + " ")
 
+    loc_list = []
+    for event in events:
+        if location_one_event(event[7],locations, False)[0] == True:
+            loc_list.append(location_one_event(event[7],locations, False)[1] + " ")
+        else:
+            loc_list.append(" ")
+
     only_location = [location_one_event(event[7],locations, True)[1] for event in events]
     #temp_plaintext = ["".join(event[1] + " " + event[5]) for event in events]
     #temp_plaintext = frogtoplain()
     temp_plaintext = read_list_text("D:/Users/Tanja/Documents/Scriptie/mltc-Ugenda/data/frogplain.txt")
+
+    #plaintext = [event[1] + " " + event[5] for event in events]
+    #plaintext = [event.decode('utf-8') for event in temp_plaintext]
+    #plaintext = [date_time_list[y] + " " + date_time_list[y] +  event[1] + " " + event[5] for y, event in enumerate(events)]
+    #plaintext = [date_time_list[y] + " " + date_time_list[y] + event.decode('utf-8') for y, event in enumerate(temp_plaintext)]
+    #plaintext = [loc_list[y] + " " + loc_list[y] +  " " + only_location[y] + " " + only_location[y] + " " + event[1] + " " + event[5] for y, event in enumerate(events)]
+    #plaintext = [loc_list[y] + " " + loc_list[y] +  " " + only_location[y] + " " + only_location[y] + " " + event.decode('utf-8') for y, event in enumerate(temp_plaintext)]
+    #plaintext = [date_time_loc_list[y] + " " + date_time_loc_list[y] +  " " + only_location[y] + " " + only_location[y] + " " + event[1] + " " + event[5] for y, event in enumerate(events)]
     plaintext = [date_time_loc_list[y] + " " + date_time_loc_list[y] +  " " + only_location[y] + " " + only_location[y] + " " + event.decode('utf-8') for y, event in enumerate(temp_plaintext)]
 
 
@@ -308,7 +335,7 @@ if __name__ == "__main__":
         # Logistic regression
         clf = OneVsRestClassifier(LogisticRegression(class_weight=None , random_state=0, solver='liblinear'),n_jobs=-2)
         # Random forest
-        #clf = OneVsRestClassifier(RandomForestClassifier(n_estimators=150, random_state=0, class_weight="balanced"), n_jobs=-2)
+        #clf = OneVsRestClassifier(RandomForestClassifier(n_estimators=30, random_state=0, class_weight="balanced"), n_jobs=-2)
         print "Fitting"
         clf.fit(X_train, y_train)
 
